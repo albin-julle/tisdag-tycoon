@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Lokalen</title>
+<style>
+  :root { --ink:#2b2118; --paper:#fffaf2; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; overflow:hidden; background:#2a2f3a; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color:var(--ink); }
+  #view canvas { display:block; touch-action:none; }
+  .card { background:var(--paper); border:3px solid var(--ink); border-radius:16px; box-shadow:0 4px 0 rgba(0,0,0,.25); }
+  #panel { position:fixed; top:12px; left:12px; width:min(280px, calc(100% - 24px)); padding:12px 14px; }
+  #panel h1 { margin:0 0 6px; font-size:19px; }
+  #panel p { margin:0 0 8px; font-size:13px; line-height:1.4; color:#4b4038; }
+  .toggles { display:flex; flex-wrap:wrap; gap:6px; }
+  .toggles label, .toggles button { font-family:inherit; font-weight:800; font-size:12px; border:3px solid var(--ink); border-radius:10px; background:#fff; padding:4px 8px; cursor:pointer; color:var(--ink); display:flex; gap:4px; align-items:center; }
+  .links { margin-top:8px; font-size:12px; }
+  .links a { color:#6b7280; margin-right:10px; }
+  #labels { position:fixed; inset:0; pointer-events:none; overflow:hidden; }
+  .lbl { position:absolute; left:0; top:0; white-space:nowrap; background:var(--paper); border:2px solid var(--ink); color:var(--ink); font-size:13px; font-weight:800; padding:3px 9px; border-radius:10px; box-shadow:0 2px 0 rgba(0,0,0,.25); }
+  .lbl.small { font-size:11px; padding:2px 7px; background:#2b2118dd; color:#fff; border-color:#2b2118; }
+  #help { position:fixed; bottom:12px; right:12px; padding:6px 12px; font-size:12px; font-weight:700; }
+</style>
+<script src="models.js"></script>
+<script src="lokal.js"></script>
+<script src="assets/logo.js"></script>
+<script type="importmap">{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }</script>
+</head>
+<body>
+<div id="view"></div>
+<div id="labels"></div>
+<div id="panel" class="card">
+  <h1>🏢 Lokalen</h1>
+  <p>Lager och klädtryck överst, profilkläder med 45°-kant, kontoret under med soffhörna, och maskinhallen till vänster. Entrén är i profilrummets högra vägg.</p>
+  <div class="toggles">
+    <label><input type="checkbox" id="tLabels" checked> Etiketter</label>
+    <label><input type="checkbox" id="tPeople" checked> Personer</label>
+    <button id="reset">↺ 45° vy</button>
+    <button id="top">⬇ Ovanifrån</button>
+  </div>
+  <div class="links"><a href="index.html">← Spelet</a><a href="maskiner.html">Maskinparken →</a></div>
+</div>
+<div id="help" class="card">Dra för att rotera · scrolla/nyp för att zooma · högerklick för att panorera</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { SVGLoader } from 'three/addons/loaders/SVGLoader.js';
+
+const M = TryckeriModels.create(THREE);
+const $ = s => document.querySelector(s);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+$('#view').appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#2a2f3a');
+const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 300);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.maxPolarAngle = Math.PI / 2.1; controls.minZoom = 0.5; controls.maxZoom = 8;
+
+scene.add(new THREE.HemisphereLight('#fff6e8', '#9a8f83', 1.6));
+const sun = new THREE.DirectionalLight('#ffffff', 2.2);
+sun.castShadow = true; sun.shadow.mapSize.set(4096, 4096);
+Object.assign(sun.shadow.camera, { left: -22, right: 22, top: 22, bottom: -22, near: 1, far: 70 });
+sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.02;
+scene.add(sun);
+
+const L = TryckeriLokal.build(M, THREE);
+scene.add(L.group);
+// Tisdag-loggan som frigolitskylt vid soffhörnan
+if (window.TISDAG_LOGO_SVG) {
+  const S = L.signSpot, sign = M.buildLogoSign(SVGLoader, TISDAG_LOGO_SVG, { width: S.width, depth: 0.06 });
+  sign.position.set(S.x, S.y, S.z); sign.rotation.y = S.rotY; L.group.add(sign);
+}
+sun.position.copy(L.center).add(new THREE.Vector3(8, 22, 12)); sun.target.position.copy(L.center); scene.add(sun.target);
+
+const labelsEl = $('#labels');
+const labels = L.labels.map(l => { const el = document.createElement('div'); el.className = 'lbl ' + l.cls; el.textContent = l.text; labelsEl.appendChild(el); return { el, pos: l.pos }; });
+const _v = new THREE.Vector3();
+function place(el, p) {
+  _v.copy(p).project(camera);
+  el.style.transform = `translate(${((_v.x + 1) / 2 * innerWidth).toFixed(1)}px,${((1 - _v.y) / 2 * innerHeight).toFixed(1)}px) translate(-50%,-100%)`;
+}
+
+function resize() {
+  const w = innerWidth, h = innerHeight, a = w / h;
+  renderer.setSize(w, h);
+  const halfH = Math.max(11.5, 15.5 / a);
+  camera.left = -halfH * a; camera.right = halfH * a; camera.top = halfH; camera.bottom = -halfH;
+  camera.updateProjectionMatrix();
+}
+function frame() {
+  controls.target.copy(L.center);
+  // samma vinkel som i spelet: 45° snett uppifrån, entrén uppe
+  camera.position.set(12, 16.97, 12).add(L.center);
+  camera.zoom = 1; resize(); controls.update();
+}
+addEventListener('resize', resize);
+$('#reset').onclick = frame;
+$('#top').onclick = () => {
+  controls.target.copy(L.center);
+  camera.position.set(L.center.x, 30, L.center.z + 0.01); // rakt ovanifrån, entrén uppe
+  camera.zoom = 0.95; resize(); controls.update();
+};
+function applyToggles() {
+  labels.forEach(l => l.el.style.visibility = $('#tLabels').checked ? '' : 'hidden');
+  L.people.visible = $('#tPeople').checked;
+}
+document.querySelectorAll('.toggles input').forEach(i => i.addEventListener('change', applyToggles));
+
+const clock = new THREE.Clock();
+function loop() {
+  requestAnimationFrame(loop);
+  controls.update();
+  const t = clock.getElapsedTime();
+  L.machines.forEach(m => m.animate(t));
+  labels.forEach(l => place(l.el, l.pos));
+  renderer.render(scene, camera);
+}
+frame(); applyToggles(); loop();
+</script>
+</body>
+</html>

@@ -1,0 +1,958 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Tisdag Tycoon</title>
+<style>
+  :root { --ink:#2b2118; --accent:#e07a5f; --paper:#fffaf2; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; overflow:hidden; background:#2a2f3a; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color:var(--ink); -webkit-user-select:none; user-select:none; touch-action:none; }
+  #game canvas { display:block; }
+  #labels { position:fixed; inset:0; pointer-events:none; overflow:hidden; }
+  .lbl { position:absolute; left:0; top:0; white-space:nowrap; will-change:transform; }
+  .bubble { background:var(--paper); border:3px solid var(--ink); border-radius:14px; padding:4px 10px 6px; font-weight:700; font-size:15px; box-shadow:0 3px 0 rgba(0,0,0,.25); text-align:center; }
+  .bubble .bar, .mlabel .bar, .pad .bar { height:6px; background:#0002; border-radius:3px; margin-top:4px; overflow:hidden; min-width:60px; }
+  .bubble .bar i, .mlabel .bar i, .pad .bar i { display:block; height:100%; width:100%; background:#4ade80; border-radius:3px; }
+  .bubble.wait { animation: pop .6s ease-in-out infinite alternate; }
+  .mlabel { background:#2b2118dd; color:#fff; border-radius:10px; padding:3px 8px 4px; font-size:13px; font-weight:700; text-align:center; }
+  .mlabel.goal { background:#facc15; color:var(--ink); border:2px solid var(--ink); }
+  .mlabel.done { background:#3b82f6; animation: pop .5s ease-in-out infinite alternate; }
+  .pad { background:#fffaf2ee; border:3px dashed var(--ink); border-radius:10px; padding:4px 10px; font-weight:800; font-size:13px; text-align:center; }
+  .pad.poor { color:#b91c1c; }
+  .float { font-weight:900; font-size:22px; color:#16a34a; text-shadow:0 2px 0 #fff, 0 0 6px #fff; animation: rise 1.3s ease-out forwards; }
+  @keyframes rise { from { opacity:1; margin-top:0; } to { opacity:0; margin-top:-70px; } }
+  @keyframes pop { from { scale:1; } to { scale:1.08; } }
+  #hud { position:fixed; top:12px; left:12px; right:12px; display:flex; justify-content:space-between; align-items:flex-start; pointer-events:none; gap:8px; }
+  .chip { background:var(--paper); border:3px solid var(--ink); border-radius:14px; padding:6px 14px; font-weight:800; font-size:18px; box-shadow:0 3px 0 rgba(0,0,0,.3); pointer-events:auto; }
+  #money.bump { animation: bump .3s; }
+  @keyframes bump { 50% { transform:scale(1.15); } }
+  #stats { font-size:14px; margin-top:6px; }
+  .right { display:flex; flex-direction:column; align-items:flex-end; gap:6px; }
+  .zoom { display:flex; gap:6px; }
+  .zoom button { font-size:16px; padding:4px 10px; }
+  button.chip { cursor:pointer; font-family:inherit; color:var(--ink); }
+  button.chip:active { transform:translateY(2px); box-shadow:0 1px 0 rgba(0,0,0,.3); }
+  #hint { position:fixed; bottom:16px; left:50%; transform:translateX(-50%); max-width:calc(100% - 32px); text-align:center; font-size:16px; pointer-events:none; white-space:normal; }
+  #toast { position:fixed; top:80px; left:50%; transform:translateX(-50%); background:var(--ink); color:#fff; padding:8px 16px; border-radius:12px; font-weight:700; opacity:0; transition:opacity .3s; pointer-events:none; max-width:calc(100% - 32px); text-align:center; }
+  #toast.show { opacity:1; }
+  #orders { position:fixed; left:12px; top:118px; width:min(270px, calc(50% - 18px)); max-height:calc(100% - 210px); overflow:auto; background:var(--paper); border:3px solid var(--ink); border-radius:14px; padding:8px 10px; box-shadow:0 3px 0 rgba(0,0,0,.3); font-size:13px; z-index:3; }
+  #orders .ohead { font-weight:900; font-size:14px; margin-bottom:4px; }
+  #orders .empty { color:#6b7280; font-style:italic; }
+  .ord { border-top:2px dashed #0002; padding:6px 0 4px 10px; position:relative; cursor:pointer; }
+  .ord:hover { background:#fde68a55; }
+  .ord .dot { position:absolute; left:0; top:9px; width:6px; height:calc(100% - 14px); border-radius:3px; }
+  .ord .t { font-weight:800; }
+  .ord .steps { display:flex; flex-direction:column; gap:2px; margin:4px 0; }
+  .ord .steps span { font-size:12px; font-weight:700; padding:2px 8px; border-radius:6px; background:#f1f1ee; color:#6b7280; }
+  .ord .steps span.ok { background:#dcfce7; color:#166534; }
+  .ord .steps span.now { background:#fde68a; color:#78350f; }
+  .ord .st { font-size:12px; font-weight:700; }
+  .ord .st.go { color:#b45309; }
+  .ord .pb { height:4px; background:#0002; border-radius:2px; overflow:hidden; margin-top:3px; }
+  .ord .pb i { display:block; height:100%; background:#4ade80; }
+  @media (max-width: 640px) { #orders { font-size:12px; top:112px; } }
+  #guide { position:fixed; top:76px; left:50%; transform:translateX(-50%); width:min(460px, calc(100% - 24px)); background:#fde68a; border:3px solid var(--ink); border-radius:16px; padding:12px 16px; box-shadow:0 4px 0 rgba(0,0,0,.3); font-size:16px; font-weight:700; line-height:1.4; z-index:6; text-align:center; }
+  #guide .gstep { font-size:12px; color:#6b5b2e; text-transform:uppercase; letter-spacing:.06em; margin-bottom:4px; }
+  #guide .gbtns { margin-top:8px; display:flex; justify-content:center; gap:8px; }
+  #guide button { font-family:inherit; font-weight:800; border:2px solid var(--ink); border-radius:10px; background:#fff; padding:5px 12px; cursor:pointer; color:var(--ink); font-size:13px; }
+  #guide #gNext { background:#16a34a; color:#fff; font-size:16px; }
+  #book { position:fixed; inset:0; background:#2a2f3acc; display:flex; align-items:center; justify-content:center; padding:12px; z-index:9; }
+  #book .bcard { position:relative; background:var(--paper); border:4px solid var(--ink); border-radius:20px; padding:18px; width:min(820px, 100%); max-height:calc(100% - 24px); overflow:auto; box-shadow:0 6px 0 rgba(0,0,0,.35); }
+  #book h2 { margin:0 0 4px; }
+  #book .bintro { margin:0 0 12px; font-size:14px; color:#4b4038; }
+  #bookClose { position:absolute; top:10px; right:12px; border:none; background:none; font-size:20px; cursor:pointer; color:var(--ink); }
+  #book .bwrap { display:grid; grid-template-columns: 220px 1fr; gap:14px; }
+  @media (max-width: 640px) { #book .bwrap { grid-template-columns: 1fr; } }
+  #bList button { display:flex; width:100%; justify-content:space-between; gap:6px; font-family:inherit; font-weight:700; font-size:14px; text-align:left; border:2px solid var(--ink); border-radius:10px; background:#fff; padding:6px 10px; margin-bottom:6px; cursor:pointer; color:var(--ink); }
+  #bList button.on { background:#fde68a; }
+  #bList button small { color:#6b7280; font-weight:600; }
+  #bDetail h3 { margin:0 0 4px; }
+  #bDetail .tag { display:inline-block; font-size:12px; font-weight:800; padding:2px 8px; border-radius:8px; background:#dcfce7; color:#166534; margin-bottom:8px; }
+  #bDetail .tag.no { background:#fef3c7; color:#92400e; }
+  #bDetail p { font-size:14px; line-height:1.5; margin:6px 0 10px; }
+  #bDetail h4 { margin:10px 0 6px; font-size:14px; }
+  #bDetail .chips { display:flex; flex-wrap:wrap; gap:6px; }
+  #bDetail .chips a, #bDetail .chips span { font-size:13px; font-weight:700; padding:4px 10px; border:2px solid var(--ink); border-radius:999px; background:#fff; color:var(--ink); text-decoration:none; }
+  #bDetail .chips a:hover { background:#fde68a; }
+  #bDetail .more { display:inline-block; margin-top:12px; font-size:13px; font-weight:700; color:#2563eb; }
+  #info a { color:#2563eb; font-weight:700; }
+  #info { position:fixed; left:12px; bottom:76px; width:min(330px, calc(100% - 24px)); background:var(--paper); border:3px solid var(--ink); border-radius:16px; padding:12px 14px; box-shadow:0 4px 0 rgba(0,0,0,.3); font-size:14px; line-height:1.4; z-index:4; animation: slidein .35s ease-out; }
+  #info b { font-size:16px; display:block; margin-bottom:4px; }
+  #info small { display:block; margin-top:6px; color:#6b7280; }
+  #infoClose { position:absolute; top:6px; right:8px; border:none; background:none; font-size:16px; cursor:pointer; color:var(--ink); }
+  @keyframes slidein { from { transform:translateY(20px); opacity:0; } to { transform:none; opacity:1; } }
+  #paused { position:fixed; inset:0; background:#2a2f3a88; display:flex; align-items:center; justify-content:center; z-index:8; pointer-events:none; }
+  #paused .card { background:var(--paper); border:4px solid var(--ink); border-radius:20px; padding:18px 28px; font-size:26px; font-weight:900; text-align:center; }
+  #shop { position:fixed; top:70px; right:12px; width:min(340px, calc(100% - 24px)); max-height:calc(100% - 150px); overflow:auto; background:var(--paper); border:3px solid var(--ink); border-radius:16px; padding:12px; box-shadow:0 4px 0 rgba(0,0,0,.3); display:none; z-index:5; }
+  #shop.open { display:block; }
+  #shop h3 { margin:0 0 8px; }
+  .up { display:flex; gap:10px; align-items:center; padding:8px 0; border-top:2px dashed #0002; }
+  .up .ic { font-size:28px; }
+  .up .tx { flex:1; font-size:13px; }
+  .up .tx b { font-size:15px; display:block; }
+  .up button { font-family:inherit; font-weight:800; border:3px solid var(--ink); border-radius:10px; background:#fde68a; padding:6px 10px; cursor:pointer; color:var(--ink); }
+  .up button:disabled { background:#e5e7eb; color:#9ca3af; border-color:#9ca3af; cursor:default; }
+  #reset { margin-top:10px; font-size:12px; background:none; border:none; text-decoration:underline; cursor:pointer; color:#6b7280; font-family:inherit; }
+  #tablePanel { position:fixed; bottom:76px; left:50%; transform:translateX(-50%); width:min(440px, calc(100% - 24px)); background:var(--paper); border:3px solid var(--ink); border-radius:16px; padding:10px 12px; box-shadow:0 4px 0 rgba(0,0,0,.3); font-size:14px; }
+  #tablePanel .row { margin-top:8px; display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+  #tablePanel .row span { width:100%; font-size:12px; color:#6b7280; }
+  #tablePanel button { font-family:inherit; font-weight:700; font-size:14px; border:2px solid var(--ink); border-radius:10px; background:#fff; padding:6px 10px; cursor:pointer; color:var(--ink); }
+  #tablePanel button:disabled { opacity:.4; cursor:default; }
+  #start { position:fixed; inset:0; background:#2a2f3acc; display:flex; align-items:center; justify-content:center; padding:16px; z-index:10; }
+  #start .card { background:var(--paper); border:4px solid var(--ink); border-radius:20px; padding:24px; max-width:460px; box-shadow:0 6px 0 rgba(0,0,0,.35); }
+  #start h1 { margin:0 0 4px; font-size:28px; }
+  #start ol { padding-left:20px; line-height:1.5; }
+  #start button { font-size:20px; width:100%; margin-top:8px; background:#fde68a; }
+  #start .links { font-size:12px; margin-top:10px; text-align:center; }
+  #start .links a { color:#6b7280; margin:0 6px; }
+</style>
+<script src="models.js"></script>
+<script src="lokal.js"></script>
+<script src="assets/logo.js"></script>
+<script type="importmap">{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }</script>
+</head>
+<body>
+<div id="game"></div>
+<div id="labels"></div>
+<div id="hud">
+  <div>
+    <div class="chip" id="money">💰 0 kr</div>
+    <div class="chip" id="stats">😊 0</div>
+  </div>
+  <div class="right">
+    <div class="zoom"><button class="chip" id="bookBtn">📖 Maskiner</button><button class="chip" id="shopBtn">🛒 Uppgraderingar</button></div>
+    <div class="zoom"><button class="chip" id="pauseBtn" title="Pausa">⏸</button><button class="chip" id="zoomIn">＋</button><button class="chip" id="zoomOut">－</button></div>
+  </div>
+</div>
+<div id="shop">
+  <h3>🛒 Uppgraderingar</h3>
+  <div id="upList"></div>
+  <div style="font-size:12px;margin-top:8px;color:#6b7280">Nya maskiner köper du genom att ställa dig på de streckade rutorna i maskinhallen.</div>
+  <button id="reset">Börja om från noll</button>
+</div>
+<div id="tablePanel" style="display:none"></div>
+<div class="chip" id="hint">…</div>
+<div id="toast"></div>
+<div id="orders"><div class="ohead">📋 Ordrar</div><div id="oList"></div></div>
+<div id="guide" style="display:none"><div class="gstep" id="gStep"></div><div id="gText"></div><div class="gbtns"><button id="gSkip">Hoppa över guiden</button><button id="gNext" style="display:none">Kör! 🚀</button></div></div>
+<div id="book" style="display:none"><div class="bcard"><button id="bookClose" aria-label="Stäng">✕</button><h2>📖 Maskinboken</h2><p class="bintro">Det här är maskinerna i vår maskinhall – vad de gör och vilka av våra produkter som tillverkas på dem.</p><div class="bwrap"><div id="bList"></div><div id="bDetail"></div></div></div></div>
+<div id="info" class="card" style="display:none"><button id="infoClose" aria-label="Stäng">✕</button><div id="infoBody"></div></div>
+<div id="paused" style="display:none"><div class="card">⏸ Pausat<br><small>Tryck på ▶ för att fortsätta</small></div></div>
+<div id="start">
+  <div class="card">
+    <h1>🖨️ Tisdag Tycoon</h1>
+    <div>Driv tryckeriet – från första visitkortet till hela maskinparken!</div>
+    <ol>
+      <li>Ta kundens order vid <b>disken</b>.</li>
+      <li>Spring till rätt <b>maskin</b> i maskinhallen. Vissa jobb behöver flera steg, t.ex. tryck och sedan <b>skärmaskin</b>.</li>
+      <li>Hämta det färdiga och <b>lämna till kunden</b>.</li>
+      <li>Köp fler maskiner på de streckade rutorna. Du kan bära flera saker samtidigt!</li>
+    </ol>
+    <div style="font-size:14px;color:#555">Styr med <b>WASD / piltangenter</b>, eller klicka/tryck där du vill gå. Zooma med scrollhjulet eller ＋/－.</div>
+    <button class="chip" id="play">Spela</button>
+    <div class="links"><a href="#" id="replayGuide">Spela guiden igen</a>·<a href="lokal.html">Visa lokalen</a>·<a href="maskiner.html">Maskinparken</a></div>
+  </div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { SVGLoader } from 'three/addons/loaders/SVGLoader.js';
+
+const $ = s => document.querySelector(s);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const rand = (a, b) => a + Math.random() * (b - a);
+const pick = a => a[Math.floor(Math.random() * a.length)];
+
+const M = TryckeriModels.create(THREE);
+const L = TryckeriLokal.build(M, THREE, { game: true });
+const { box, cyl } = M;
+
+// ================== DATA ==================
+// Kategorier = vilket slags maskin ett steg kräver
+const CATS = { press: 'digitalpress', iridesse: 'Iridesse', cut: 'skärmaskin', wide: 'storformatare', flatbed: 'planprinter', heat: 'värmepress', diecut: 'Colorcut', vinyl: 'Summa' };
+// Produkter: steg (i ordning), tid per steg i sekunder och pris
+const PRODUCTS = {
+  visitkort: { name: 'Visitkort',     icon: '📇', steps: ['press', 'cut'],    time: [3, 2],  price: 90,  info: 'Trycks på digitalpressen, många kort på varje ark. Sedan skärs arken till rätt storlek i skärmaskinen.' },
+  flyers:    { name: 'Flyers',        icon: '📄', steps: ['press', 'cut'],    time: [4, 2],  price: 110, info: 'Trycks på stora ark i digitalpressen och skärs sedan ned till A5 eller A6 i skärmaskinen.' },
+  broschyr:  { name: 'Broschyrer',    icon: '📖', steps: ['press'],           time: [6],    price: 140, info: 'Pressen trycker, falsar och häftar i ett svep – efterbehandlingen sitter direkt på Versant och Iridesse.' },
+  guldkort:  { name: 'Guldvisitkort', icon: '✨', steps: ['iridesse', 'cut'], time: [4, 2],  price: 230, info: 'Iridesse kan trycka metalliskt guld och silver i samma körning som vanliga färger. Sedan skärs korten ut.' },
+  etiketter: { name: 'Etiketter',     icon: '🏷️', steps: ['press', 'diecut'], time: [4, 3],  price: 190, info: 'Trycks på digitalpressen och skärs sedan ut i valfri form av Colorcut-skäraren.' },
+  affisch:   { name: 'Affischer',     icon: '🖼️', steps: ['wide'],            time: [6],    price: 160, info: 'Storformatsskrivarna trycker på rulle, upp till 1,6 meter brett.' },
+  banderoll: { name: 'Banderoll',     icon: '🎌', steps: ['wide'],            time: [8],    price: 240, info: 'Trycks i storformat på tålig väv eller PVC – perfekt för utomhusbruk och mässor.' },
+  dekaler:   { name: 'Dekaler',       icon: '🌟', steps: ['wide', 'vinyl'],   time: [5, 3], price: 260, info: 'Trycks på vinyl i storformatsskrivaren och konturskärs sedan i Summa-plottern.' },
+  folietext: { name: 'Folietext',     icon: '🔤', steps: ['vinyl'],           time: [4],     price: 150, info: 'Summa-plottern skär ut text och logotyper i färgad folie – till skyltfönster, bilar och väggar.' },
+  skylt:     { name: 'Skyltar',       icon: '🪧', steps: ['flatbed'],         time: [8],    price: 290, info: 'Planprintern trycker direkt på skivor som kapa, forex och akryl.' },
+  tshirt:    { name: 'T-shirts',      icon: '👕', steps: ['heat'],            time: [4],     price: 130, info: 'Ett tryck pressas fast på plagget med värme och tryck i värmepressen.' },
+};
+// Länkar till Tisdags produktsidor
+const T = 'https://tisdag.se/';
+const LINK = {
+  visitkort: ['Visitkort', 'trycksaker/visitkort/'], flyers: ['Flyers', 'trycksaker/flyers/'], broschyrer: ['Broschyrer', 'trycksaker/broschyrer/'],
+  foldrar: ['Foldrar', 'trycksaker/foldrar/'], kataloger: ['Kataloger', 'trycksaker/kataloger/'], menyer: ['Menyer', 'trycksaker/menyer/'],
+  kuvert: ['Kuvert', 'trycksaker/kuvert/'], block: ['Anteckningsblock', 'trycksaker/anteckningsblock/'], bordsryttare: ['Bordsryttare', 'trycksaker/bordsryttare/'],
+  etiketter: ['Etiketter', 'trycksaker/etiketter/'], forpackningar: ['Förpackningar', 'trycksaker/forpackningar/'], dekaler: ['Dekaler', 'trycksaker/dekaler/'],
+  rollups: ['Roll-ups', 'massa-och-display/roll-ups/'], banderoller: ['Banderoller', 'massa-och-display/banderoller/'], vepor: ['Vepor', 'massa-och-display/vepor/'],
+  massvaggar: ['Mässväggar', 'massa-och-display/massvaggar/'], bildekor: ['Bildekor', 'massa-och-display/bildekor/'], skyltar: ['Skyltar', 'massa-och-display/skyltar/'],
+  tavlor: ['Tavlor', 'massa-och-display/tavlor/'], plexi: ['Plexiglastavlor', 'massa-och-display/plexiglastavlor/'], gatupratare: ['Gatupratare', 'massa-och-display/gatupratare/'],
+  frigolit: ['Frigolitskyltar', 'massa-och-display/frigolit-skyltar/'], tshirts: ['T-shirts', 'profilklader/t-shirts/'], trojor: ['Tröjor', 'profilklader/trojor/'],
+  arbetsklader: ['Arbetskläder', 'profilklader/arbestklader/'], vaskor: ['Väskor', 'profilklader/vaskor/'], kepsar: ['Kepsar', 'profilklader/kepsar/'],
+};
+const linkHtml = k => `<a href="${T + LINK[k][1]}" target="_blank" rel="noopener">${LINK[k][0]} ↗</a>`;
+// Vad varje maskinplats används till hos Tisdag + vilken 3D-modell den har i maskinvyn
+const MSITE = {
+  versant:  { model: 'versant280', links: ['visitkort', 'flyers', 'broschyrer', 'foldrar', 'kataloger', 'menyer', 'kuvert', 'block'] },
+  iridesse: { model: 'iridesse', links: ['visitkort', 'broschyrer', 'kataloger', 'foldrar', 'bordsryttare', 'menyer'] },
+  cut1:     { model: 'guillotine', links: ['visitkort', 'flyers', 'menyer', 'bordsryttare'] },
+  cut2:     { model: 'guillotine', links: ['visitkort', 'flyers', 'menyer', 'bordsryttare'] },
+  colorcut: { model: 'colorcut', links: ['etiketter', 'forpackningar', 'dekaler'] },
+  summa:    { model: 'summa', links: ['dekaler', 'bildekor'] },
+  epson1:   { model: 'epsonS80600', links: ['rollups', 'banderoller', 'vepor', 'massvaggar', 'bildekor'] },
+  epson2:   { model: 'epsonS80600', links: ['rollups', 'banderoller', 'vepor', 'massvaggar', 'bildekor'] },
+  epson3:   { model: 'epsonS80600', links: ['rollups', 'banderoller', 'vepor', 'massvaggar', 'bildekor'] },
+  hp:       { model: 'hpLatex560', links: ['rollups', 'vepor', 'tavlor', 'massvaggar'] },
+  flatbed:  { model: 'flatbed', links: ['skyltar', 'tavlor', 'plexi', 'gatupratare', 'frigolit'] },
+  press:    { model: 'heatPress', links: ['tshirts', 'trojor', 'arbetsklader', 'vaskor', 'kepsar'] },
+};
+const PRODUCT_LINK = { visitkort: 'visitkort', flyers: 'flyers', broschyr: 'broschyrer', guldkort: 'visitkort', etiketter: 'etiketter', affisch: 'vepor', banderoll: 'banderoller', dekaler: 'dekaler', folietext: 'bildekor', skylt: 'skyltar', tshirt: 'tshirts' };
+// Maskinplatser i lokalen (nycklar från lokal.js): vad de klarar, pris och fart
+const MINFO = {
+  versant:  { cats: ['press'],             price: 0 },
+  cut1:     { cats: ['cut'],               price: 0 },
+  press:    { cats: ['heat'],              price: 200 },
+  summa:    { cats: ['vinyl'],             price: 250 },
+  epson1:   { cats: ['wide'],              price: 300 },
+  colorcut: { cats: ['diecut'],            price: 400 },
+  hp:       { cats: ['wide'],              price: 450, speed: 0.85 },
+  cut2:     { cats: ['cut'],               price: 250 },
+  flatbed:  { cats: ['flatbed'],           price: 700 },
+  epson2:   { cats: ['wide'],              price: 350 },
+  epson3:   { cats: ['wide'],              price: 350 },
+  iridesse: { cats: ['press', 'iridesse'], price: 1000, speed: 0.7 },
+};
+const UPGRADES = {
+  speed:  { name: 'Snabbare tryck',      desc: 'Alla maskiner jobbar snabbare',   icon: '⚡', costs: [120, 300, 650] },
+  shoes:  { name: 'Sköna skor',          desc: 'Du springer snabbare',            icon: '👟', costs: [80, 220] },
+  arms:   { name: 'Större famn',         desc: 'Bär fler saker samtidigt',        icon: '💪', costs: [120, 350] },
+  coffee: { name: 'Kaffe till kunderna', desc: 'Kunderna får mer tålamod',        icon: '☕', costs: [150] },
+  slot:   { name: 'Extra kassaplats',    desc: 'En kund till kan stå vid disken', icon: '🧾', costs: [300] },
+};
+const SPEED_MULT = [1, 0.8, 0.65, 0.5];
+const SHOE_SPEED = [5.4, 6.4, 7.4];
+const CARRY_CAP = [3, 4, 5];
+const PLAYER_R = 0.32;
+const { OZ, W } = L.dims;
+
+// ================== SAVE ==================
+const SAVE_KEY = 'tisdag-tycoon-v1';
+const freshSave = () => ({ money: 0, served: 0, stars: 0, seen: {}, owned: { versant: true, cut1: true }, up: { speed: 0, shoes: 0, coffee: 0, slot: 0, arms: 0 } });
+let save = freshSave();
+try {
+  const s = JSON.parse(localStorage.getItem(SAVE_KEY));
+  if (s) save = { ...save, ...s, seen: { ...s.seen }, owned: { ...save.owned, ...s.owned }, up: { ...save.up, ...s.up } };
+} catch (e) {}
+function persist() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) {} }
+
+// ================== RENDERER ==================
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+$('#game').appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#2a2f3a');
+scene.add(L.group);
+
+const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
+const CAM_OFF = new THREE.Vector3(12, 16.97, 12); // 45° snett uppifrån
+let zoomH = 7.5;
+function resize() {
+  const w = innerWidth, h = innerHeight, a = w / h;
+  renderer.setSize(w, h);
+  const halfH = zoomH * Math.max(1, 0.85 / a);
+  camera.left = -halfH * a; camera.right = halfH * a; camera.top = halfH; camera.bottom = -halfH;
+  camera.updateProjectionMatrix();
+}
+addEventListener('resize', resize); resize();
+const setZoom = z => { zoomH = clamp(z, 4.5, 15); resize(); };
+addEventListener('wheel', e => { if (e.target.closest && e.target.closest('#shop')) return; setZoom(zoomH * (1 + e.deltaY * 0.001)); }, { passive: true });
+$('#zoomIn').onclick = () => setZoom(zoomH * 0.8);
+$('#zoomOut').onclick = () => setZoom(zoomH * 1.25);
+
+scene.add(new THREE.HemisphereLight('#fff6e8', '#9a8f83', 1.6));
+const sun = new THREE.DirectionalLight('#ffffff', 2.2);
+sun.castShadow = true; sun.shadow.mapSize.set(4096, 4096);
+Object.assign(sun.shadow.camera, { left: -20, right: 20, top: 20, bottom: -20, near: 1, far: 70 });
+sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.02;
+sun.position.copy(L.center).add(new THREE.Vector3(8, 22, 12)); sun.target.position.copy(L.center);
+scene.add(sun, sun.target);
+
+// Tisdag-loggan vid soffhörnan
+if (window.TISDAG_LOGO_SVG) {
+  const S = L.signSpot, sign = M.buildLogoSign(SVGLoader, TISDAG_LOGO_SVG, { width: S.width, depth: 0.06 });
+  sign.position.set(S.x, S.y, S.z); sign.rotation.y = S.rotY; scene.add(sign);
+}
+
+// ================== ETIKETTER (HTML ovanpå 3D) ==================
+const labelsEl = $('#labels');
+function makeLabel(cls) { const d = document.createElement('div'); d.className = 'lbl ' + cls; labelsEl.appendChild(d); return d; }
+const _v = new THREE.Vector3();
+function placeLabel(el, x, y, z) {
+  _v.set(x, y, z).project(camera);
+  const off = Math.abs(_v.x) > 1.2 || Math.abs(_v.y) > 1.2;
+  el.style.visibility = off ? 'hidden' : '';
+  if (off) return;
+  el.style.transform = `translate(${((_v.x + 1) / 2 * innerWidth).toFixed(1)}px,${((1 - _v.y) / 2 * innerHeight).toFixed(1)}px) translate(-50%,-100%)`;
+}
+function floatText(txt, x, y, z, color) {
+  const el = makeLabel('float'); if (color) el.style.color = color;
+  el.textContent = txt; placeLabel(el, x, y, z); setTimeout(() => el.remove(), 1300);
+}
+// informationskort – förklarar produkter och maskiner första gången
+const infoQueue = []; let infoTimer;
+function showInfo(html) { infoQueue.push(html); if ($('#info').style.display === 'none') nextInfo(); }
+function nextInfo() {
+  clearTimeout(infoTimer);
+  const html = infoQueue.shift();
+  if (!html) { $('#info').style.display = 'none'; return; }
+  $('#infoBody').innerHTML = html; $('#info').style.display = '';
+  infoTimer = setTimeout(nextInfo, 12000);
+}
+$('#infoClose').onclick = nextInfo;
+let toastTimer;
+function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2600); }
+let lastWarn = 0;
+function warn(msg) { const n = performance.now(); if (n - lastWarn > 2500) { lastWarn = n; toast(msg); } }
+
+// ================== KOLLISION ==================
+const solids = [...L.colliders];
+function toLocal(p, o) { const c = Math.cos(o.rot), s = Math.sin(o.rot), dx = p.x - o.x, dz = p.z - o.z; return [dx * c - dz * s, dx * s + dz * c]; }
+function distToBox(p, o) { const [lx, lz] = toLocal(p, o); return Math.hypot(Math.max(0, Math.abs(lx) - o.hw), Math.max(0, Math.abs(lz) - o.hd)); }
+function pushOut(p, r) {
+  for (const o of solids) {
+    let [lx, lz] = toLocal(p, o);
+    const cx = clamp(lx, -o.hw, o.hw), cz = clamp(lz, -o.hd, o.hd);
+    const ex = lx - cx, ez = lz - cz, d2 = ex * ex + ez * ez;
+    if (d2 >= r * r) continue;
+    if (d2 > 1e-8) { const d = Math.sqrt(d2); lx = cx + ex / d * r; lz = cz + ez / d * r; }
+    else if (o.hw + r - Math.abs(lx) < o.hd + r - Math.abs(lz)) lx = Math.sign(lx || 1) * (o.hw + r);
+    else lz = Math.sign(lz || 1) * (o.hd + r);
+    const c = Math.cos(o.rot), s = Math.sin(o.rot);
+    p.x = o.x + lx * c + lz * s; p.z = o.z - lx * s + lz * c;
+  }
+  const B = L.bounds; p.x = clamp(p.x, B.x1, B.x2); p.z = clamp(p.z, B.z1, B.z2);
+}
+
+// ================== SAKER MAN BÄR ==================
+const SHAPE = { visitkort: 'cards', guldkort: 'cards', flyers: 'stack', broschyr: 'booklet', etiketter: 'labels', affisch: 'roll', banderoll: 'roll', dekaler: 'roll', folietext: 'vinyl', skylt: 'board', tshirt: 'shirt' };
+function makeTicket(color) {
+  const g = new THREE.Group();
+  box(g, 0.45, 0.03, 0.6, '#ffffff', 0, 0, 0);
+  box(g, 0.45, 0.04, 0.16, color, 0, 0.005, -0.2, false);
+  box(g, 0.3, 0.04, 0.04, '#9ca3af', 0, 0.005, 0.05, false);
+  box(g, 0.3, 0.04, 0.04, '#9ca3af', 0, 0.005, 0.17, false);
+  g.rotation.set(0.7, Math.PI / 4, 0);
+  return g;
+}
+function makeItemMesh(item) {
+  const color = item.order.color, key = item.order.product;
+  if (item.step === 0) return makeTicket(color);
+  const g = new THREE.Group();
+  switch (SHAPE[key]) {
+    case 'cards':
+      for (let i = 0; i < 3; i++) box(g, 0.36, 0.1, 0.24, '#ffffff', (i - 1) * 0.12, i * 0.11, 0);
+      box(g, 0.36, 0.02, 0.24, key === 'guldkort' ? '#d4af37' : color, 0.12, 0.28, 0, false); break;
+    case 'stack': box(g, 0.55, 0.26, 0.75, '#ffffff'); box(g, 0.5, 0.02, 0.7, color, 0, 0.14, 0, false); break;
+    case 'booklet': for (let i = 0; i < 3; i++) box(g, 0.42, 0.06, 0.6, i % 2 ? '#ffffff' : color, 0, i * 0.065, 0); break;
+    case 'labels': box(g, 0.5, 0.12, 0.4, '#ffffff'); [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([a, b]) => cyl(g, 0.06, 0.06, 0.01, color, a * 0.12, 0.065, b * 0.09, false)); break;
+    case 'roll': { const r = cyl(g, 0.13, 0.13, 0.95, '#ffffff'); r.rotation.z = Math.PI / 2; const b = cyl(g, 0.14, 0.14, 0.15, color, 0, 0, 0, false); b.rotation.z = Math.PI / 2; break; }
+    case 'vinyl': { const r = cyl(g, 0.1, 0.1, 0.6, color); r.rotation.z = Math.PI / 2; break; }
+    case 'board': box(g, 0.8, 0.06, 0.55, color); box(g, 0.6, 0.01, 0.35, '#ffffff', 0, 0.035, 0, false); break;
+    case 'shirt': for (let i = 0; i < 3; i++) box(g, 0.45, 0.08, 0.4, i === 2 ? color : '#ffffff', 0, i * 0.085, 0); break;
+  }
+  g.rotation.y = Math.PI / 4;
+  return g;
+}
+const isDone = it => it.step >= PRODUCTS[it.order.product].steps.length;
+const nextCat = it => PRODUCTS[it.order.product].steps[it.step];
+function itemLabel(it) {
+  const p = PRODUCTS[it.order.product];
+  if (it.step === 0) return `🧾 Order: ${p.icon} ${p.name}`;
+  if (isDone(it)) return `${p.icon} ${p.name} (klart)`;
+  return `${p.icon} ${p.name} → ${CATS[nextCat(it)]}`;
+}
+
+// ================== SPELAREN ==================
+const player = M.makePerson({ shirt: '#f2cc8f', skin: '#f1c27d', hair: '#5a3825', pants: '#3d405b', player: true });
+player.position.copy(L.playerStart); player.rotation.y = Math.PI;
+scene.add(player);
+const inv = [];
+let itemSeq = 0;
+const cap = () => CARRY_CAP[save.up.arms];
+const hasRoom = () => inv.length < cap();
+function renderInv() {
+  const anchor = player.userData.carry; anchor.clear();
+  let y = 0;
+  for (const it of inv) { const m = makeItemMesh(it); m.position.y = y; anchor.add(m); y += it.step === 0 ? 0.28 : 0.36; }
+  updateHud();
+}
+function addItem(it) { it.id ??= ++itemSeq; inv.push(it); renderInv(); }
+function removeItem(it) { const i = inv.indexOf(it); if (i >= 0) { inv.splice(i, 1); renderInv(); } }
+function animatePerson(p, moving, dt) {
+  const u = p.userData;
+  if (moving) u.phase += dt * 11; else u.phase *= 0.8;
+  const s = Math.sin(u.phase) * (moving ? 0.6 : 0);
+  u.legL.rotation.x = s; u.legR.rotation.x = -s; u.armL.rotation.x = -s * 0.8; u.armR.rotation.x = s * 0.8;
+  u.body.position.y = moving ? Math.abs(Math.sin(u.phase)) * 0.06 : 0;
+  u.carry.position.y = 2.05 + Math.sin(performance.now() / 250) * 0.04;
+}
+function turnTowards(obj, dx, dz, dt) {
+  let d = Math.atan2(dx, dz) - obj.rotation.y; d = Math.atan2(Math.sin(d), Math.cos(d));
+  obj.rotation.y += d * Math.min(1, dt * 12);
+}
+
+// ================== MASKINER ==================
+function padTexture() {
+  const cv = document.createElement('canvas'); cv.width = cv.height = 256; const g = cv.getContext('2d');
+  g.fillStyle = 'rgba(253,230,138,0.55)'; g.fillRect(0, 0, 256, 256);
+  g.strokeStyle = '#2b2118'; g.lineWidth = 14; g.setLineDash([28, 18]); g.strokeRect(10, 10, 236, 236);
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+const PAD_TEX = padTexture();
+const machines = [];
+class Machine {
+  constructor(spot) {
+    this.spot = spot; this.key = spot.key; this.info = MINFO[spot.key]; this.group = spot.group; this.name = spot.spotName;
+    this.col = L.colliderOf(this.group, 0.03);
+    const c = Math.cos(this.col.rot), s = Math.sin(this.col.rot), f = this.col.hd + 0.55;
+    this.point = new THREE.Vector3(this.col.x + f * s, 0, this.col.z + f * c);
+    this.state = 'idle'; this.item = null; this.t = 0; this.dur = 1; this.pop = 1; this.goal = false;
+    this.el = makeLabel('mlabel'); this.lastHtml = '';
+    this.owned = !!save.owned[this.key];
+    this.group.visible = this.owned;
+    if (this.owned) solids.push(this.col); else this.makePad();
+    this.doneAnchor = new THREE.Group(); this.doneAnchor.position.set(this.col.x, this.col.top + 0.35, this.col.z); scene.add(this.doneAnchor);
+  }
+  get icons() { return Object.values(PRODUCTS).filter(p => p.steps.some(k => this.info.cats.includes(k))).map(p => p.icon).join(' '); }
+  accepts(it) { const k = nextCat(it); return !!k && this.info.cats.includes(k); }
+  makePad() {
+    const o = this.col, g = new THREE.Group(); g.position.set(o.x, 0.03, o.z); g.rotation.y = o.rot;
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(o.hw * 2 + 0.3, o.hd * 2 + 0.3), new THREE.MeshBasicMaterial({ map: PAD_TEX, transparent: true }));
+    m.rotation.x = -Math.PI / 2; g.add(m); scene.add(g);
+    this.pad = g; this.padBox = { ...o, hw: o.hw + 0.15, hd: o.hd + 0.15 }; this.fill = 0;
+  }
+  start(it) {
+    this.item = it; this.state = 'printing'; this.t = 0;
+    this.dur = PRODUCTS[it.order.product].time[it.step] * SPEED_MULT[save.up.speed] * (this.info.speed || 1);
+  }
+  finish() {
+    this.item.step++; this.state = 'done';
+    this.doneAnchor.clear(); this.doneAnchor.add(makeItemMesh(this.item));
+  }
+  takeOut() { const it = this.item; this.item = null; this.state = 'idle'; this.doneAnchor.clear(); return it; }
+  reset() { this.item = null; this.state = 'idle'; this.doneAnchor.clear(); }
+  buy() {
+    addMoney(-this.info.price);
+    const before = availableProducts();
+    save.owned[this.key] = true; persist();
+    this.owned = true; this.group.visible = true; this.pop = 0;
+    scene.remove(this.pad); this.pad = null; this.lastHtml = '';
+    solids.push(this.col); pushOut(player.position, PLAYER_R);
+    const fresh = availableProducts().filter(k => !before.includes(k)).map(k => PRODUCTS[k].icon + ' ' + PRODUCTS[k].name);
+    toast(`${this.name} köpt! 🎉`);
+    showInfo(`<b>🎉 ${this.spot.def.name}</b>${this.spot.def.desc}` + (fresh.length ? `<small>Nya jobb: ${fresh.join(', ')}</small>` : '') + `<small>Läs mer i 📖 Maskinboken</small>`);
+    floatText('🎉', this.col.x, this.col.top + 0.8, this.col.z);
+  }
+  setHtml(h, cls) {
+    if (h !== this.lastHtml) { this.el.innerHTML = h; this.lastHtml = h; this.barEl = this.el.querySelector('.bar i'); }
+    if (this.el.className !== cls) this.el.className = cls;
+  }
+  update(dt, time) {
+    const o = this.col;
+    if (!this.owned) {
+      const price = this.info.price, [lx, lz] = toLocal(player.position, this.padBox);
+      const on = running && Math.abs(lx) < this.padBox.hw && Math.abs(lz) < this.padBox.hd, rich = save.money >= price;
+      if (on && rich) this.fill += dt; else this.fill = Math.max(0, this.fill - dt * 2);
+      this.setHtml(`🛒 ${this.name}<br>${price} kr` + (on && !rich ? `<br><small>Du behöver ${price - save.money} kr till</small>` : '') +
+        (this.fill > 0 ? `<div class="bar"><i style="width:${Math.min(100, Math.round(this.fill * 100))}%;background:#16a34a"></i></div>` : ''), 'lbl pad' + (rich ? '' : ' poor'));
+      placeLabel(this.el, o.x, 0.5, o.z);
+      if (this.fill >= 1) this.buy();
+      return;
+    }
+    if (this.pop < 1) { this.pop = Math.min(1, this.pop + dt / 0.45); const p = this.pop, k = 1.7; this.group.scale.setScalar(1 + (k + 1) * Math.pow(p - 1, 3) + k * Math.pow(p - 1, 2)); }
+    if (this.state === 'printing') {
+      this.t += dt; this.spot.animate(time);
+      this.setHtml(`${PRODUCTS[this.item.order.product].icon} ${this.name}<div class="bar"><i></i></div>`, 'lbl mlabel');
+      if (this.barEl) this.barEl.style.width = (Math.min(1, this.t / this.dur) * 100) + '%';
+      if (this.t >= this.dur) this.finish();
+    } else if (this.state === 'done') {
+      this.setHtml(`✅ Klar – hämta!`, 'lbl mlabel done');
+      this.doneAnchor.position.y = o.top + 0.35 + Math.abs(Math.sin(time * 4)) * 0.12;
+      this.doneAnchor.rotation.y += dt;
+    } else {
+      this.setHtml(this.goal ? `👉 ${this.name}` : this.icons, this.goal ? 'lbl mlabel goal' : 'lbl mlabel');
+    }
+    placeLabel(this.el, o.x, o.top + 0.3, o.z);
+  }
+}
+let running = false;
+for (const spot of L.machines) if (MINFO[spot.key]) machines.push(new Machine(spot));
+function availableProducts() {
+  const cats = new Set(machines.filter(m => m.owned).flatMap(m => m.info.cats));
+  return Object.keys(PRODUCTS).filter(k => PRODUCTS[k].steps.every(c => cats.has(c)));
+}
+
+// ================== AVLASTNINGSBORD ==================
+const DT = L.dropTable;
+const tableG = new THREE.Group(); tableG.position.set(DT.x, 0, DT.z); tableG.rotation.y = DT.rot; scene.add(tableG);
+box(tableG, 2.4, 0.06, 1.1, '#ecc89e', 0, 0.9, 0);
+[[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([sx, sz]) => box(tableG, 0.07, 0.87, 0.07, '#8b5e3c', sx * 1.13, 0.435, sz * 0.48));
+box(tableG, 2.2, 0.04, 0.06, '#e07a5f', 0, 0.9, 0.56, false);
+const tableCol = L.colliderOf(tableG, 0.03); solids.push(tableCol);
+const tableAnchor = new THREE.Group(); tableAnchor.position.y = 0.95; tableG.add(tableAnchor);
+const tableLabel = makeLabel('mlabel'); tableLabel.textContent = '📥 Avlastning';
+const TABLE_CAP = 4, tableItems = [];
+function renderTable() {
+  tableAnchor.clear();
+  tableItems.forEach((it, i) => { const m = makeItemMesh(it); m.position.set(-0.8 + i * 0.53, it.step === 0 ? 0.03 : 0.12, 0); if (it.step === 0) m.rotation.set(0, Math.PI / 4, 0); tableAnchor.add(m); });
+}
+const nearTable = () => distToBox(player.position, tableCol) < 0.85;
+let tableSig = null;
+function updateTablePanel() {
+  const panel = $('#tablePanel'), on = running && nearTable();
+  const sig = on ? `${inv.map(i => i.id + ':' + i.step)}|${tableItems.map(i => i.id)}|${cap()}` : '';
+  if (sig === tableSig) return; tableSig = sig;
+  if (!on) { panel.style.display = 'none'; return; }
+  const btn = (act, i, it, dis) => `<button data-act="${act}" data-i="${i}" style="border-left:8px solid ${it.order.color}" ${dis ? 'disabled' : ''}>${act === 'down' ? '⬇' : '⬆'} ${itemLabel(it)}</button>`;
+  panel.innerHTML = `<b>📥 Avlastningsbord</b>
+    <div class="row"><span>I händerna (${inv.length}/${cap()}) – tryck för att lägga ner:</span>${inv.map((it, i) => btn('down', i, it, tableItems.length >= TABLE_CAP)).join('') || '<i>Tomt</i>'}</div>
+    <div class="row"><span>På bordet (${tableItems.length}/${TABLE_CAP}) – tryck för att ta upp:</span>${tableItems.map((it, i) => btn('up', i, it, !hasRoom())).join('') || '<i>Tomt</i>'}</div>`;
+  panel.style.display = '';
+}
+$('#tablePanel').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b || b.disabled) return;
+  const i = +b.dataset.i;
+  if (b.dataset.act === 'down' && tableItems.length < TABLE_CAP && inv[i]) tableItems.push(inv.splice(i, 1)[0]);
+  else if (b.dataset.act === 'up' && hasRoom() && tableItems[i]) inv.push(tableItems.splice(i, 1)[0]);
+  renderInv(); renderTable();
+});
+
+// ================== KUNDER ==================
+const SHIRTS = ['#81b29a', '#6d9dc5', '#e5989b', '#b5838d', '#9b5de5', '#00bbf9', '#f15bb5', '#90be6d', '#f9844a', '#577590'];
+const SKINS = ['#f1c27d', '#e0ac69', '#c68642', '#8d5524', '#ffdbac'];
+const HAIRS = ['#2b1d14', '#5a3825', '#d4a017', '#a52a2a', '#1a1a1a', '#b0b0b0'];
+const customers = [];
+const slots = [null, null, null];
+const activeSlots = () => 2 + save.up.slot;
+const coffeeMult = () => save.up.coffee ? 1.4 : 1;
+const AISLE = L.entrance.aisleX, CZ = OZ - 0.85;
+const V3 = (x, z) => new THREE.Vector3(x, 0, z);
+
+class Customer {
+  constructor(slot, product) {
+    this.slot = slot; this.x = L.slots[slot];
+    const used = customers.map(c => c.color);
+    this.color = pick(SHIRTS.filter(c => !used.includes(c)));
+    this.mesh = M.makePerson({ shirt: this.color, skin: pick(SKINS), hair: pick(HAIRS), pants: pick(['#3d4a6b', '#4b5563', '#6b4f3a', '#1f2937']) });
+    this.mesh.position.copy(L.entrance.outside); scene.add(this.mesh);
+    this.product = product || pick(availableProducts());
+    this.order = { product: this.product, color: this.color, customer: this };
+    this.path = [V3(W + 0.85, 2.5), V3(AISLE, 2.5), V3(AISLE, CZ), V3(this.x, CZ)];
+    this.state = 'enter'; this.speed = 2.8;
+    this.el = makeLabel('bubble'); this.el.style.borderColor = this.color; this.el.style.display = 'none';
+    this.counterPoint = V3(this.x, OZ + 0.8);
+  }
+  setBubble(html) { this.el.innerHTML = html; this.barEl = this.el.querySelector('.bar i'); this.el.style.display = ''; }
+  arrive() {
+    this.state = 'waiting'; this.patienceMax = this.patience = 60 * coffeeMult();
+    const p = PRODUCTS[this.product];
+    this.setBubble(`${p.icon} ${p.name}<div class="bar"><i></i></div>`); this.el.classList.add('wait');
+  }
+  takeOrder() {
+    this.state = 'ordered'; this.el.classList.remove('wait');
+    const p = PRODUCTS[this.product];
+    this.patienceMax = this.patience = (p.time.reduce((a, b) => a + b, 0) * SPEED_MULT[save.up.speed] + 60 + 20 * p.steps.length) * coffeeMult();
+    this.setBubble(`⏳ ${p.icon}<div class="bar"><i></i></div>`);
+  }
+  leave(happy) {
+    this.state = 'leaving'; this.el.classList.remove('wait');
+    this.setBubble('😊 Tack!');
+    slots[this.slot] = null;
+    this.path = [V3(AISLE, CZ), V3(AISLE, 2.5), V3(W + 0.85, 2.5), L.entrance.outside.clone()];
+    if (!happy) {
+      save.missed++; persist(); updateHud();
+      const mine = inv.filter(it => it.order.customer === this);
+      const onTable = tableItems.filter(it => it.order.customer === this);
+      onTable.forEach(it => tableItems.splice(tableItems.indexOf(it), 1)); if (onTable.length) renderTable();
+      mine.forEach(removeItem);
+      for (const m of machines) if (m.item && m.item.order.customer === this) m.reset();
+      if (mine.length || onTable.length) toast('Kunden gick… ordern slängdes 😞');
+    }
+    setTimeout(() => { this.el.style.display = 'none'; }, 1800);
+  }
+  update(dt) {
+    let moving = false;
+    if (this.path.length) {
+      const t = this.path[0], dx = t.x - this.mesh.position.x, dz = t.z - this.mesh.position.z, d = Math.hypot(dx, dz), step = this.speed * dt;
+      if (d <= step) { this.mesh.position.x = t.x; this.mesh.position.z = t.z; this.path.shift(); }
+      else { this.mesh.position.x += dx / d * step; this.mesh.position.z += dz / d * step; turnTowards(this.mesh, dx, dz, dt); moving = true; }
+      if (!this.path.length) {
+        if (this.state === 'enter') this.arrive();
+        else if (this.state === 'leaving') { scene.remove(this.mesh); this.el.remove(); customers.splice(customers.indexOf(this), 1); return; }
+      }
+    } else turnTowards(this.mesh, 0, 1, dt);
+    animatePerson(this.mesh, moving, dt);
+    if (this.state === 'waiting' || this.state === 'ordered') {
+      this.patience -= dt;
+      const f = clamp(this.patience / this.patienceMax, 0, 1);
+      if (this.barEl) { this.barEl.style.width = (f * 100) + '%'; this.barEl.style.background = f > 0.5 ? '#4ade80' : f > 0.25 ? '#facc15' : '#ef4444'; }
+      // kunderna går aldrig – de blir bara lite mindre nöjda (mindre dricks och färre stjärnor)
+      if (this.patience <= 0 && !this.bored) { this.bored = true; this.el.innerHTML = this.el.innerHTML.replace(/^[^<]*/, m => '🥱 ' + m); this.barEl = this.el.querySelector('.bar i'); }
+    }
+    const p = this.mesh.position; placeLabel(this.el, p.x, 2.15, p.z);
+  }
+}
+let spawnTimer = 3;
+function updateSpawning(dt) {
+  if (tut.active) return;
+  spawnTimer -= dt; if (spawnTimer > 0) return;
+  const owned = machines.filter(m => m.owned).length;
+  const maxCustomers = Math.min(activeSlots(), owned <= 3 ? 1 : owned <= 6 ? 2 : 3);
+  const free = []; for (let i = 0; i < activeSlots(); i++) if (!slots[i]) free.push(i);
+  if (!free.length || customers.filter(c => c.state !== 'leaving').length >= maxCustomers) { spawnTimer = 1; return; }
+  const s = pick(free), c = new Customer(s); slots[s] = c; customers.push(c);
+  spawnTimer = Math.max(6, rand(12, 18) - owned * 0.6);
+}
+
+// ================== INTERAKTION ==================
+const near = (pt, r = 1.1) => Math.hypot(player.position.x - pt.x, player.position.z - pt.z) < r;
+function interact() {
+  for (const c of customers) {
+    if ((c.state !== 'waiting' && c.state !== 'ordered') || !near(c.counterPoint)) continue;
+    const done = inv.find(it => it.order.customer === c && isDone(it));
+    if (done) {
+      const p = PRODUCTS[c.product];
+      const f = clamp(c.patience / c.patienceMax, 0, 1);
+      const tip = Math.round(p.price * 0.5 * f), stars = f > 0.6 ? 5 : f > 0.3 ? 4 : f > 0 ? 3 : 2;
+      save.stars = (save.stars * save.served + stars) / (save.served + 1);
+      addMoney(p.price + tip); save.served++; persist(); updateHud();
+      floatText(`+${p.price + tip} kr ` + '⭐'.repeat(stars), c.mesh.position.x, 2.6, c.mesh.position.z);
+      removeItem(done); c.leave(true);
+    } else if (c.state === 'waiting') {
+      if (hasRoom()) {
+        c.takeOrder(); addItem({ order: c.order, step: 0 }); floatText(`${PRODUCTS[c.product].icon} Order!`, c.counterPoint.x, 2.2, c.counterPoint.z, '#2563eb');
+        if (!save.seen[c.product]) {
+          save.seen[c.product] = true; persist();
+          const p = PRODUCTS[c.product];
+          showInfo(`<b>${p.icon} Nytt jobb: ${p.name}</b>${p.info}<small>Arbetsgång: ${p.steps.map(k => CATS[k]).join(' → ')} → kunden<br>${linkHtml(PRODUCT_LINK[c.product])} på tisdag.se</small>`);
+        }
+      }
+      else warn(`Händerna är fulla (${inv.length}/${cap()}) – lämna något först!`);
+    }
+  }
+  for (const m of machines) {
+    if (!m.owned || !near(m.point)) continue;
+    if (m.state === 'done') {
+      if (hasRoom()) addItem(m.takeOut());
+      else warn(`Händerna är fulla (${inv.length}/${cap()}) – lämna något först!`);
+    }
+    if (m.state === 'idle') {
+      const it = inv.find(i => m.accepts(i));
+      if (it) { removeItem(it); m.start(it); }
+      else { const other = inv.find(i => !isDone(i)); if (other) warn(`${m.name} kan inte göra det – ${itemLabel(other)}`); }
+    }
+  }
+}
+
+// mål-ringar på golvet + markerade maskiner
+const ringGeo = new THREE.RingGeometry(0.55, 0.75, 32);
+const rings = Array.from({ length: 12 }, () => {
+  const r = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: '#facc15', transparent: true, opacity: 0.85 }));
+  r.rotation.x = -Math.PI / 2; r.position.y = 0.04; r.visible = false; scene.add(r); return r;
+});
+const tableGoal = new THREE.Vector3();
+function updateGoals(time) {
+  const goals = new Set();
+  machines.forEach(m => m.goal = false);
+  for (const it of inv) {
+    if (isDone(it)) goals.add(it.order.customer.counterPoint);
+    else machines.filter(m => m.owned && m.state === 'idle' && m.accepts(it)).forEach(m => { goals.add(m.point); m.goal = true; });
+  }
+  if (hasRoom()) {
+    customers.filter(c => c.state === 'waiting').forEach(c => goals.add(c.counterPoint));
+    machines.filter(m => m.owned && m.state === 'done').forEach(m => goals.add(m.point));
+    if (tableItems.length) { tableGoal.set(tableCol.x + 1.0, 0, tableCol.z); goals.add(tableGoal); }
+  }
+  const list = [...goals], s = 1 + Math.sin(time * 6) * 0.08;
+  rings.forEach((r, i) => { const g = list[i]; r.visible = !!g; if (g) { r.position.x = g.x; r.position.z = g.z; r.scale.setScalar(s); } });
+}
+let lastHint = '';
+function updateHint() {
+  let t;
+  const done = inv.find(isDone);
+  const work = inv.find(it => !isDone(it) && machines.some(m => m.owned && m.state === 'idle' && m.accepts(it)));
+  if (done) t = `Lämna ${PRODUCTS[done.order.product].icon} ${PRODUCTS[done.order.product].name.toLowerCase()} till kunden vid disken!`;
+  else if (work) {
+    const m = machines.filter(m => m.owned && m.state === 'idle' && m.accepts(work))
+      .sort((a, b) => a.point.distanceTo(player.position) - b.point.distanceTo(player.position))[0];
+    const p = PRODUCTS[work.order.product];
+    t = work.step === 0 ? `Gå till ${m.name} med ordern (${p.icon} ${p.name})` : `${p.icon} ${p.name} ska vidare till ${m.name}`;
+  } else if (hasRoom() && machines.some(m => m.state === 'done')) t = `Hämta från ${machines.find(m => m.state === 'done').name}!`;
+  else if (hasRoom() && customers.some(c => c.state === 'waiting')) t = 'En kund väntar vid disken – ta ordern';
+  else if (hasRoom() && tableItems.length) t = 'Du har saker kvar på avlastningsbordet';
+  else if (inv.length) t = 'Maskinerna du behöver är upptagna – vänta lite (eller lägg ifrån dig på avlastningsbordet)';
+  else if (machines.some(m => m.state === 'printing')) t = 'Maskinerna jobbar… ta nästa kund under tiden!';
+  else t = 'Väntar på kunder…';
+  if (t !== lastHint) { $('#hint').textContent = t; lastHint = t; }
+}
+
+// ================== ORDERLISTA ==================
+const STEP_SHORT = { press: '🖨 Tryck', iridesse: '✨ Iridesse', cut: '✂ Skär', wide: '🖨 Storformat', flatbed: '🪧 Planprinter', heat: '👕 Värmepress', diecut: '✂ Colorcut', vinyl: '✂ Summa' };
+let ordersSig = '';
+function orderInfo(c) {
+  const p = PRODUCTS[c.product];
+  if (c.state === 'waiting' || c.state === 'enter') return { p, step: -1, text: '🧍 Väntar vid disken – ta ordern', go: true, point: c.counterPoint };
+  let it = inv.find(i => i.order.customer === c), where = 'hand', m = null;
+  if (!it) { m = machines.find(mm => mm.item && mm.item.order.customer === c); if (m) { it = m.item; where = 'machine'; } }
+  if (!it) { it = tableItems.find(i => i.order.customer === c); where = 'table'; }
+  if (!it) return { p, step: p.steps.length, text: '…', point: c.counterPoint };
+  const done = isDone(it);
+  if (where === 'hand') {
+    if (done) return { p, step: it.step, text: '📦 Lämna till kunden!', go: true, point: c.counterPoint };
+    const target = machines.filter(mm => mm.owned && mm.accepts(it)).sort((a, b) => (a.state === 'idle' ? 0 : 1) - (b.state === 'idle' ? 0 : 1) || a.point.distanceTo(player.position) - b.point.distanceTo(player.position))[0];
+    return { p, step: it.step, text: `🎒 I famnen – gå till ${target ? target.name : CATS[nextCat(it)]}`, go: true, point: target && target.point };
+  }
+  if (where === 'machine') {
+    if (m.state === 'done') return { p, step: it.step, text: `✅ Klar i ${m.name} – hämta!`, go: true, point: m.point };
+    return { p, step: it.step, active: true, text: `⏳ ${m.name} jobbar…`, prog: m, point: m.point };
+  }
+  return { p, step: it.step, text: '📥 På avlastningsbordet', go: true, point: new THREE.Vector3(tableCol.x + 1, 0, tableCol.z) };
+}
+function updateOrders() {
+  const list = customers.filter(c => c.state !== 'leaving' && c.state !== 'enter');
+  const infos = list.map(c => [c, orderInfo(c)]);
+  const sig = infos.map(([c, o]) => `${c.color}|${o.step}|${o.text}`).join('§');
+  if (sig !== ordersSig) {
+    ordersSig = sig;
+    $('#oList').innerHTML = infos.length ? infos.map(([c, o], i) => {
+      const n = o.p.steps.length;
+      const mark = j => j < o.step ? '✓' : j === o.step ? '▶' : '○';
+      const steps = o.p.steps.map((k, j) => `<span class="${j < o.step ? 'ok' : j === o.step ? 'now' : ''}">${mark(j)} ${STEP_SHORT[k]}</span>`).join('') +
+        `<span class="${o.step >= n ? 'now' : ''}">${o.step >= n ? '▶' : '○'} 📦 Till kunden</span>`;
+      return `<div class="ord" data-i="${i}"><div class="dot" style="background:${c.color}"></div><div class="t">${o.p.icon} ${o.p.name}</div><div class="steps">${steps}</div><div class="st ${o.go ? 'go' : ''}">${o.text}</div>${o.prog ? '<div class="pb"><i></i></div>' : ''}</div>`;
+    }).join('') : '<div class="empty">Inga ordrar just nu – väntar på kunder…</div>';
+    $('#oList').dataset.points = '';
+    ordersPoints = infos.map(([, o]) => o.point);
+  }
+  // uppdatera förloppsstaplar varje bildruta
+  const bars = $('#oList').querySelectorAll('.ord');
+  infos.forEach(([, o], i) => { if (o.prog && bars[i]) { const b = bars[i].querySelector('.pb i'); if (b) b.style.width = Math.min(100, o.prog.t / o.prog.dur * 100) + '%'; } });
+}
+let ordersPoints = [];
+// klicka på en order = gå dit
+$('#oList').addEventListener('click', e => {
+  const row = e.target.closest('.ord'); if (!row || !running) return;
+  const pt = ordersPoints[+row.dataset.i]; if (!pt) return;
+  const t = pt.clone(); pushOut(t, PLAYER_R); target = t; marker.position.x = t.x; marker.position.z = t.z; marker.material.opacity = 0.9;
+});
+
+// ================== GUIDE (första gången man spelar) ==================
+const tut = { active: false, i: 0, moved: 0, customer: null };
+const arrow = new THREE.Group();
+{ const cone = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.6, 16), new THREE.MeshBasicMaterial({ color: '#facc15' }));
+  cone.rotation.x = Math.PI; arrow.add(cone);
+  const ring = new THREE.Mesh(new THREE.ConeGeometry(0.32, 0.66, 16), new THREE.MeshBasicMaterial({ color: '#2b2118', side: THREE.BackSide }));
+  ring.rotation.x = Math.PI; arrow.add(ring); }
+arrow.visible = false; scene.add(arrow);
+const mVersant = () => machines.find(m => m.key === 'versant'), mCut = () => machines.find(m => m.key === 'cut1');
+const TUT = [
+  { text: '👋 Hej och välkommen till Tisdag! Det här är du. Gå runt med <b>WASD / piltangenterna</b> eller <b>klicka på golvet</b> dit du vill gå.',
+    done: () => tut.moved > 2.5 },
+  { text: '🧍 En kund har kommit in genom entrén. Gå fram till <b>disken</b> och ta emot beställningen.',
+    target: () => tut.customer && tut.customer.counterPoint, done: () => tut.customer && tut.customer.state !== 'enter' && tut.customer.state !== 'waiting' },
+  { text: '🧾 Kunden vill ha visitkort! Visitkort trycks på vår <b>Versant 280</b>. Spring ut i maskinhallen – genom dörren i kontoret.',
+    target: () => mVersant().point, done: () => mVersant().state !== 'idle' || inv.some(i => i.step > 0) },
+  { text: '🖨️ Versant trycker visitkorten – många kort på varje ark. Vänta tills den är klar och <b>hämta trycket</b>.',
+    target: () => mVersant().point, done: () => inv.some(i => i.step >= 1) },
+  { text: '✂️ Arken ska skäras till rätt storlek. Gå till <b>skärmaskinen</b> vid den sneda väggen.',
+    target: () => mCut().point, done: () => mCut().state !== 'idle' || inv.some(isDone) },
+  { text: '✂️ Skärmaskinen jobbar. <b>Hämta de färdiga visitkorten</b> när den är klar.',
+    target: () => mCut().point, done: () => inv.some(isDone) },
+  { text: '📦 Klart! Spring tillbaka till <b>disken</b> och lämna visitkorten till kunden.',
+    target: () => tut.customer && tut.customer.counterPoint, done: () => tut.customer && tut.customer.state === 'leaving' },
+  { text: '🎉 Snyggt jobbat – så går det till hos oss! Tjäna pengar och <b>köp fler maskiner</b> på de streckade rutorna. Under <b>📖 Maskiner</b> kan du läsa mer om varje maskin och våra produkter.',
+    final: true },
+];
+function startTutorial() {
+  tut.active = true; tut.i = 0; tut.moved = 0; tut.customer = null;
+  $('#guide').style.display = ''; $('#hint').style.display = 'none'; showTutStep();
+}
+function showTutStep() {
+  const st = TUT[tut.i];
+  $('#gStep').textContent = `Guide – steg ${tut.i + 1} av ${TUT.length}`;
+  $('#gText').innerHTML = st.text;
+  $('#gNext').style.display = st.final ? '' : 'none';
+  $('#gSkip').style.display = st.final ? 'none' : '';
+  if (tut.i === 1 && !tut.customer) { // guidens kund kommer in
+    const s = 0, c = new Customer(s, 'visitkort'); slots[s] = c; customers.push(c); tut.customer = c;
+  }
+}
+function endTutorial() {
+  tut.active = false; arrow.visible = false;
+  $('#guide').style.display = 'none'; $('#hint').style.display = '';
+  save.tutorialDone = true; save.seen.visitkort = true; save.seen._welcome = true; persist();
+  spawnTimer = 4;
+}
+$('#gSkip').onclick = endTutorial;
+$('#gNext').onclick = endTutorial;
+const lastPos = new THREE.Vector3();
+function updateTutorial(dt, time) {
+  tut.moved += player.position.distanceTo(lastPos); lastPos.copy(player.position);
+  const st = TUT[tut.i];
+  const tg = st.target && st.target();
+  arrow.visible = !!tg;
+  if (tg) { arrow.position.set(tg.x, 2.4 + Math.abs(Math.sin(time * 3)) * 0.35, tg.z); arrow.rotation.y += dt * 2; }
+  if (!st.final && st.done()) { tut.i++; showTutStep(); }
+}
+
+// ================== MASKINBOKEN ==================
+let bookSel = null, wasRunning = false;
+function openBook(key) {
+  wasRunning = running; running = false;
+  $('#book').style.display = ''; renderBook(key || bookSel || 'versant');
+}
+function closeBook() { $('#book').style.display = 'none'; running = wasRunning && !paused; }
+function renderBook(key) {
+  bookSel = key;
+  $('#bList').innerHTML = machines.map(m => `<button data-k="${m.key}" class="${m.key === key ? 'on' : ''}"><span>${m.name}</span><small>${m.owned ? '✅' : m.info.price + ' kr'}</small></button>`).join('');
+  const m = machines.find(m => m.key === key), d = m.spot.def, site = MSITE[key];
+  const games = Object.values(PRODUCTS).filter(p => p.steps.some(k => m.info.cats.includes(k)));
+  $('#bDetail').innerHTML = `<h3>${d.name}</h3>
+    <span class="tag ${m.owned ? '' : 'no'}">${m.owned ? '✅ Finns i din maskinhall' : '🛒 Köp den i spelet för ' + m.info.price + ' kr'}</span>
+    <p>${d.desc}</p>
+    <h4>Det här gör den i spelet</h4><div class="chips">${games.map(p => `<span>${p.icon} ${p.name}</span>`).join('')}</div>
+    <h4>Våra produkter som görs här</h4><div class="chips">${site.links.map(linkHtml).join('')}</div>
+    <a class="more" href="maskiner.html#${site.model}" target="_blank" rel="noopener">Se maskinen i 3D ↗</a>`;
+}
+$('#bList').addEventListener('click', e => { const b = e.target.closest('button'); if (b) renderBook(b.dataset.k); });
+$('#bookBtn').onclick = () => openBook();
+$('#bookClose').onclick = closeBook;
+$('#book').addEventListener('click', e => { if (e.target.id === 'book') closeBook(); });
+
+// ================== UI ==================
+function updateHud() {
+  $('#money').textContent = `💰 ${save.money} kr`;
+  $('#stats').innerHTML = `😊 ${save.served} &nbsp; ⭐ ${save.served ? save.stars.toFixed(1) : '–'} &nbsp; 🎒 ${inv.length}/${cap()}`;
+  if ($('#shop').classList.contains('open')) renderShop();
+}
+function addMoney(n) {
+  save.money += n; persist(); updateHud();
+  const el = $('#money'); el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump');
+}
+function renderShop() {
+  const list = $('#upList'); list.innerHTML = '';
+  for (const [key, u] of Object.entries(UPGRADES)) {
+    const lvl = save.up[key], max = u.costs.length, cost = u.costs[lvl];
+    const row = document.createElement('div'); row.className = 'up';
+    row.innerHTML = `<div class="ic">${u.icon}</div><div class="tx"><b>${u.name}</b>${u.desc}<br><small>Nivå ${lvl}/${max}</small></div>`;
+    const b = document.createElement('button');
+    if (lvl >= max) { b.textContent = 'Max'; b.disabled = true; }
+    else { b.textContent = `${cost} kr`; b.disabled = save.money < cost; b.onclick = () => buyUpgrade(key); }
+    row.appendChild(b); list.appendChild(row);
+  }
+}
+function buyUpgrade(key) {
+  const u = UPGRADES[key], cost = u.costs[save.up[key]];
+  if (cost == null || save.money < cost) return;
+  save.up[key]++; addMoney(-cost); toast(`${u.icon} ${u.name} köpt!`);
+}
+$('#shopBtn').onclick = () => { $('#shop').classList.toggle('open'); renderShop(); };
+$('#reset').onclick = () => { if (confirm('Vill du verkligen börja om? Alla pengar och maskiner försvinner.')) { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} location.reload(); } };
+if (save.served > 0 || save.money > 0) $('#play').textContent = 'Fortsätt';
+$('#play').onclick = () => {
+  $('#start').style.display = 'none'; running = true;
+  if (!save.tutorialDone) startTutorial();
+};
+$('#replayGuide').onclick = e => { e.preventDefault(); save.tutorialDone = false; $('#play').click(); };
+let paused = false;
+$('#pauseBtn').onclick = () => {
+  if ($('#start').style.display !== 'none') return;
+  paused = !paused; running = !paused;
+  $('#pauseBtn').textContent = paused ? '▶' : '⏸'; $('#paused').style.display = paused ? '' : 'none';
+};
+updateHud();
+
+// ================== INPUT & RÖRELSE ==================
+const keys = {};
+addEventListener('keydown', e => { keys[e.code] = true; });
+addEventListener('keyup', e => { keys[e.code] = false; });
+addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
+let target = null, pointerDown = false;
+const ray = new THREE.Raycaster(), ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), ndc = new THREE.Vector2();
+const marker = new THREE.Mesh(new THREE.RingGeometry(0.2, 0.3, 24), new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0 }));
+marker.rotation.x = -Math.PI / 2; marker.position.y = 0.04; scene.add(marker);
+function setTargetFromEvent(e) {
+  ndc.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+  ray.setFromCamera(ndc, camera);
+  const hit = new THREE.Vector3();
+  if (ray.ray.intersectPlane(ground, hit)) { pushOut(hit, PLAYER_R); target = hit; marker.position.x = hit.x; marker.position.z = hit.z; marker.material.opacity = 0.9; }
+}
+renderer.domElement.addEventListener('pointerdown', e => { if (!running) return; pointerDown = true; setTargetFromEvent(e); $('#shop').classList.remove('open'); });
+addEventListener('pointermove', e => { if (pointerDown) setTargetFromEvent(e); });
+addEventListener('pointerup', () => { pointerDown = false; });
+
+function updatePlayer(dt) {
+  let mx = 0, mz = 0;
+  if (keys.KeyW || keys.ArrowUp) { mx -= 1; mz -= 1; }
+  if (keys.KeyS || keys.ArrowDown) { mx += 1; mz += 1; }
+  if (keys.KeyA || keys.ArrowLeft) { mx -= 1; mz += 1; }
+  if (keys.KeyD || keys.ArrowRight) { mx += 1; mz -= 1; }
+  if (mx || mz) target = null;
+  else if (target) { mx = target.x - player.position.x; mz = target.z - player.position.z; if (Math.hypot(mx, mz) < 0.1) { target = null; mx = mz = 0; } }
+  const len = Math.hypot(mx, mz);
+  let moving = false;
+  if (len > 0) {
+    const sp = SHOE_SPEED[save.up.shoes] * dt, step = target ? Math.min(sp, len) : sp;
+    const bx = player.position.x, bz = player.position.z;
+    player.position.x += mx / len * step; player.position.z += mz / len * step;
+    pushOut(player.position, PLAYER_R);
+    const moved = Math.hypot(player.position.x - bx, player.position.z - bz);
+    moving = moved > 0.001;
+    if (target && moved < step * 0.15) target = null; // fastnat
+    turnTowards(player, mx, mz, dt);
+  }
+  animatePerson(player, moving, dt);
+  marker.material.opacity = Math.max(0, marker.material.opacity - dt * 1.5);
+}
+
+// ================== LOOP ==================
+const clock = new THREE.Clock();
+const camTarget = player.position.clone();
+function loop() {
+  requestAnimationFrame(loop);
+  const dt = Math.min(clock.getDelta(), 0.05), time = clock.elapsedTime;
+  if (running) {
+    updatePlayer(dt);
+    updateTablePanel();
+    updateSpawning(dt);
+    for (const c of [...customers]) c.update(dt);
+    interact();
+    updateGoals(time);
+    if (tut.active) updateTutorial(dt, time); else updateHint();
+    updateOrders();
+  }
+  for (const m of machines) m.update(running ? dt : 0, time);
+  camTarget.lerp(player.position, Math.min(1, dt * 5));
+  camera.position.copy(camTarget).add(CAM_OFF); camera.lookAt(camTarget);
+  placeLabel(tableLabel, tableCol.x, 1.8, tableCol.z);
+  renderer.render(scene, camera);
+}
+camera.position.copy(camTarget).add(CAM_OFF); camera.lookAt(camTarget);
+loop();
+// för felsökning i konsolen
+window.__game = { save, machines, customers, inv, player, L, loop };
+</script>
+</body>
+</html>

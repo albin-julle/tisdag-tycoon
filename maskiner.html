@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Maskinparken</title>
+<style>
+  :root { --ink:#2b2118; --paper:#fffaf2; --accent:#e07a5f; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; overflow:hidden; background:#efe7da; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color:var(--ink); }
+  #view canvas { display:block; touch-action:none; }
+  .card { background:var(--paper); border:3px solid var(--ink); border-radius:16px; box-shadow:0 4px 0 rgba(0,0,0,.25); }
+  #panel { position:fixed; top:12px; left:12px; width:min(330px, calc(100% - 24px)); max-height:calc(100% - 24px); overflow:auto; padding:14px; }
+  #panel h1 { margin:0 0 10px; font-size:20px; }
+  #tabs { display:flex; gap:6px; flex-wrap:wrap; }
+  #tabs button, .toggles label { font-family:inherit; font-weight:800; font-size:14px; border:3px solid var(--ink); border-radius:10px; background:#fff; padding:6px 10px; cursor:pointer; color:var(--ink); }
+  #tabs button.on { background:#fde68a; }
+  #name { font-size:17px; font-weight:900; margin:12px 0 2px; }
+  #desc { font-size:13px; line-height:1.4; color:#4b4038; }
+  #dims { font-size:13px; font-weight:700; margin-top:6px; }
+  #mods { list-style:none; padding:0; margin:10px 0 0; font-size:14px; }
+  #mods li { padding:6px 8px; border-radius:8px; cursor:default; display:flex; justify-content:space-between; gap:8px; }
+  #mods li:hover, #mods li.hl { background:#fde68a; }
+  #mods li small { color:#6b7280; white-space:nowrap; }
+  .toggles { display:flex; flex-wrap:wrap; gap:6px; margin-top:12px; }
+  .toggles label { font-size:12px; padding:4px 8px; display:flex; gap:4px; align-items:center; }
+  .note { font-size:11px; color:#8a7f73; margin-top:10px; }
+  #labels { position:fixed; inset:0; pointer-events:none; overflow:hidden; }
+  .lbl { position:absolute; left:0; top:0; white-space:nowrap; background:#2b2118dd; color:#fff; font-size:12px; font-weight:700; padding:3px 8px; border-radius:8px; }
+  .lbl.num { min-width:24px; text-align:center; border-radius:12px; font-size:13px; }
+  .lbl.hl { background:#e07a5f; z-index:2; }
+  .lbl.dim { background:var(--paper); color:var(--ink); border:2px solid var(--ink); font-size:14px; }
+  #help { position:fixed; bottom:12px; right:12px; padding:6px 12px; font-size:12px; font-weight:700; }
+  a.back { font-size:12px; color:#6b7280; }
+</style>
+<script src="models.js"></script>
+<script type="importmap">{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }</script>
+</head>
+<body>
+<div id="view"></div>
+<div id="labels"></div>
+<div id="panel" class="card">
+  <h1>🖨️ Maskinparken</h1>
+  <div id="tabs"></div>
+  <div id="name"></div>
+  <div id="desc"></div>
+  <div id="dims"></div>
+  <ul id="mods"></ul>
+  <div class="toggles">
+    <label><input type="checkbox" id="tLabels" checked> Etiketter</label>
+    <label><input type="checkbox" id="tFlow" checked> Animation</label>
+    <label><input type="checkbox" id="tPerson" checked> Person för skala</label>
+    <label><input type="checkbox" id="tSpin"> Snurra</label>
+  </div>
+  <div class="note">Förenklade modeller i spelets stil. Mått och moduler är ungefärliga – rätta gärna så justerar vi.<br><a class="back" href="index.html">← Till spelet</a></div>
+</div>
+<div id="help" class="card">Dra för att rotera · scrolla/nyp för att zooma · högerklick för att panorera</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+const M = TryckeriModels.create(THREE);
+const $ = s => document.querySelector(s);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+$('#view').appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#efe7da');
+const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.maxPolarAngle = Math.PI / 2.05; controls.minZoom = 0.4; controls.maxZoom = 6;
+
+scene.add(new THREE.HemisphereLight('#fff6e8', '#9a8f83', 1.6));
+const sun = new THREE.DirectionalLight('#ffffff', 2.2);
+sun.position.set(4, 10, 7); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -7, right: 7, top: 7, bottom: -7, near: 1, far: 30 }); sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.02;
+scene.add(sun);
+
+// golv med 1 m-rutor så man ser storleken
+{
+  const cv = document.createElement('canvas'); cv.width = cv.height = 128; const g = cv.getContext('2d');
+  g.fillStyle = '#e6dccb'; g.fillRect(0, 0, 128, 128); g.strokeStyle = '#cbbfa9'; g.lineWidth = 3; g.strokeRect(0, 0, 128, 128);
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(20, 20);
+  tex.anisotropy = 8;
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(20, 20), new THREE.MeshToonMaterial({ map: tex, gradientMap: M.grad }));
+  floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
+}
+
+const person = M.makePerson({ shirt: '#f2cc8f', skin: '#f1c27d', hair: '#5a3825', pants: '#3d405b', player: true });
+scene.add(person);
+
+const labelsEl = $('#labels');
+const _v = new THREE.Vector3();
+function place(el, p) {
+  _v.copy(p).project(camera);
+  const hidden = _v.z > 1;
+  el.style.display = hidden ? 'none' : '';
+  el.style.transform = `translate(${((_v.x + 1) / 2 * innerWidth).toFixed(1)}px,${((1 - _v.y) / 2 * innerHeight).toFixed(1)}px) translate(-50%,-100%)`;
+}
+
+let current = null; // { m, labels[], dimEl, dimGroup, highlight, sheets[] }
+const hlMat = new THREE.MeshBasicMaterial({ color: '#facc15', transparent: true, opacity: 0.35, depthWrite: false });
+
+function show(id) {
+  if (current) {
+    scene.remove(current.m.group, current.dimGroup, current.highlight, ...current.sheets);
+    current.labels.forEach(l => l.el.remove()); current.dimEl.remove();
+  }
+  const m = M.buildMachine(id);
+  scene.add(m.group);
+
+  // måttlinje framför maskinen
+  const dimGroup = new THREE.Group(); const z = m.depth / 2 + 0.75;
+  const lineMat = M.mat('#2b2118');
+  const bar = new THREE.Mesh(new THREE.BoxGeometry(m.length, 0.02, 0.03), lineMat); bar.position.set(0, 0.02, z); dimGroup.add(bar);
+  [-1, 1].forEach(s => { const t = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.02, 0.3), lineMat); t.position.set(s * m.length / 2, 0.02, z); dimGroup.add(t); });
+  scene.add(dimGroup);
+  const dimEl = document.createElement('div'); dimEl.className = 'lbl dim';
+  dimEl.textContent = `≈ ${m.length.toFixed(1).replace('.', ',')} m`; labelsEl.appendChild(dimEl);
+
+  // etiketter per modul
+  const labels = m.modules.map(mod => {
+    const el = document.createElement('div'); el.className = 'lbl num'; el.textContent = mod.index + 1; el.dataset.name = `${mod.index + 1}. ${mod.name}`; labelsEl.appendChild(el);
+    return { el, pos: new THREE.Vector3(mod.x, mod.h + (mod.key.includes('Engine') ? 0.95 : 0.3), 0) };
+  });
+
+  // markering vid hover
+  const highlight = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), hlMat); highlight.visible = false; scene.add(highlight);
+
+  // pappersark som åker genom maskinen
+  const sheetGeo = new THREE.BoxGeometry(0.3, 0.012, 0.21);
+  const sheets = m.def.flow ? [] : Array.from({ length: Math.ceil(m.length / 0.7) }, (_, i) => {
+    const s = new THREE.Mesh(sheetGeo, M.mat('#ffffff')); s.castShadow = true; s.userData.off = i / Math.ceil(m.length / 0.7); scene.add(s); return s;
+  });
+
+  person.position.set(-m.length / 2 - 0.7, 0, m.depth / 2 + 0.3); person.rotation.y = 0.6;
+
+  current = { id, m, labels, dimEl, dimGroup, highlight, sheets };
+
+  // panel
+  $('#name').textContent = m.def.name;
+  $('#desc').textContent = m.def.desc;
+  $('#dims').textContent = `L ≈ ${m.length.toFixed(1).replace('.', ',')} m · D ≈ ${m.depth.toFixed(2).replace('.', ',')} m · H ≈ ${m.height.toFixed(2).replace('.', ',')} m${m.def.flow ? '' : ' (utan skärm)'}`;
+  $('#mods').innerHTML = m.modules.map((mod, i) => `<li data-i="${i}"><span>${i + 1}. ${mod.name}</span><small>${Math.round(mod.w * 100)} cm</small></li>`).join('');
+  document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.id === id));
+  frame();
+  applyToggles();
+}
+
+function setHighlight(i) {
+  if (!current) return;
+  const h = current.highlight;
+  document.querySelectorAll('#mods li').forEach(li => li.classList.toggle('hl', +li.dataset.i === i));
+  current.labels.forEach((l, j) => { l.el.classList.toggle('hl', j === i); l.el.textContent = j === i ? l.el.dataset.name : j + 1; });
+  if (i == null) { h.visible = false; return; }
+  const mod = current.m.modules[i];
+  h.visible = true; h.scale.set(mod.w + 0.08, mod.h + 0.08, current.m.depth + 0.08); h.position.set(mod.x, mod.h / 2, 0);
+}
+
+// kamera: 45° snett uppifrån som i spelet
+function frame() {
+  const m = current.m;
+  controls.target.set(0, 0.6, 0);
+  camera.position.set(10, 14.14, 10).add(controls.target);
+  camera.zoom = 1; resize(); controls.update();
+}
+function resize() {
+  const w = innerWidth, h = innerHeight, a = w / h;
+  renderer.setSize(w, h);
+  const len = current ? current.m.length : 5;
+  // maskinen ses diagonalt, så den tar ca 0,75 × längden i bredd på skärmen
+  const panelPx = w > 760 ? $('#panel').offsetWidth + 24 : 0;
+  const usable = (w - panelPx) / w;
+  const halfH = Math.max(len * 0.42 / (a * usable), len * 0.26, 2.0) + 0.5;
+  const halfW = halfH * a, shift = halfW * (1 - usable);
+  camera.left = -halfW - shift; camera.right = halfW - shift; camera.top = halfH; camera.bottom = -halfH;
+  camera.updateProjectionMatrix();
+}
+addEventListener('resize', resize);
+
+// flikar
+$('#tabs').innerHTML = Object.entries(M.MACHINES).map(([id, d]) => `<button data-id="${id}">${d.short}</button>`).join('');
+$('#tabs').addEventListener('click', e => { const b = e.target.closest('button'); if (b) show(b.dataset.id); });
+$('#mods').addEventListener('mouseover', e => { const li = e.target.closest('li'); if (li) setHighlight(+li.dataset.i); });
+$('#mods').addEventListener('mouseleave', () => setHighlight(null));
+
+function applyToggles() {
+  if (!current) return;
+  const lab = $('#tLabels').checked;
+  current.labels.forEach(l => l.el.style.visibility = lab ? '' : 'hidden');
+  current.sheets.forEach(s => s.visible = $('#tFlow').checked);
+  person.visible = $('#tPerson').checked;
+  controls.autoRotate = $('#tSpin').checked; controls.autoRotateSpeed = 1.2;
+}
+document.querySelectorAll('.toggles input').forEach(i => i.addEventListener('change', applyToggles));
+
+// hovra i 3D
+const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+renderer.domElement.addEventListener('pointermove', e => {
+  if (!current || e.buttons) return;
+  ndc.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+  ray.setFromCamera(ndc, camera);
+  const hit = ray.intersectObject(current.m.group, true).find(h => h.object.userData.module != null && !h.object.userData.outline);
+  setHighlight(hit ? hit.object.userData.module : null);
+});
+
+const clock = new THREE.Clock();
+function loop() {
+  requestAnimationFrame(loop);
+  const t = clock.getElapsedTime();
+  if (current) {
+    const m = current.m;
+    current.sheets.forEach(s => {
+      const f = (t * 0.12 + s.userData.off) % 1;
+      const x = -m.length / 2 + 0.2 + f * (m.length - 0.4);
+      s.position.set(x, m.topAt(x) + 0.12 + Math.sin(f * Math.PI * 12) * 0.02, 0);
+    });
+    if ($('#tFlow').checked) m.animate(t);
+    current.labels.forEach(l => place(l.el, l.pos));
+    place(current.dimEl, new THREE.Vector3(0, 0.05, m.depth / 2 + 0.75));
+  }
+  controls.update();
+  renderer.render(scene, camera);
+}
+const startId = location.hash.slice(1);
+show(M.MACHINES[startId] ? startId : 'iridesse');
+addEventListener('hashchange', () => { const id = location.hash.slice(1); if (M.MACHINES[id]) show(id); });
+loop();
+</script>
+</body>
+</html>
