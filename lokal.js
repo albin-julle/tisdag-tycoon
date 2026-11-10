@@ -114,7 +114,7 @@
     FURN.palletRack(root, 2.3, TOP + 0.7, 0, 4.2, 1.1);
     FURN.palletRack(root, 6.6, TOP + 0.7, 0, 4.0, 1.1);
     // pallar med papper
-    [[5.2, -1.0], [6.6, -1.0], [8.0, -1.0]].forEach(([px, pz], i) => {
+    [[1.0, -1.3]].forEach(([px, pz], i) => {
       const g = new THREE.Group(); g.position.set(px, 0, pz); g.userData.furniture = true; root.add(g);
       box(g, 1.2, 0.14, 1.0, '#b5713f', 0, 0.07, 0);
       for (let k = 0; k < 3 + (i % 2); k++) box(g, 1.05, 0.22, 0.9, k % 2 ? '#f8fafc' : '#e2e8f0', 0, 0.25 + k * 0.23, 0);
@@ -126,35 +126,34 @@
     press.group.position.set(W - 1.1, 0, -2.6); root.add(press.group);   // värmepressen längst till höger
     // hyllor med plagg att trycka på
     [10.0, 11.7, 13.4, 15.1].forEach((x, i) => FURN.wallShelf(root, x, TOP + 0.3, 0, 1.6, i * 2));
-    FURN.clothingRack(root, 12.6, -1.3, 0, 2.0, 5);
-    FURN.clothingRack(root, 15.3, -1.3, 0, 1.6, 2);
+    FURN.clothingRack(root, 12.8, -1.3, 0, 2.0, 5);
 
     // ---------- Profilkläder ----------
     label('Profilkläder', 13.5, 2.9, 4.6);
     // vita ribbpaneler med plagg på de svarta väggarna (som i butiken)
     [13.4, 15.3, 17.2].forEach((x, i) => FURN.slatwall(root, x, 0.3, 0, 1.8, 2.0, i * 3));
-    [4.8, 6.7, 8.6].forEach((z, i) => FURN.slatwall(root, W - 0.3, z, -Math.PI / 2, 1.8, 2.0, i * 2 + 1));
+    [4.6, 6.5].forEach((z, i) => FURN.slatwall(root, W - 0.3, z, -Math.PI / 2, 1.8, 2.0, i * 2 + 1));
     [1.1, 3.0, 4.6].forEach((z, i) => FURN.slatwall(root, PX + 0.25, z, Math.PI / 2, 1.6, 2.0, i * 3 + 2));
     // svarta klädställningar
     FURN.clothingRack(root, 12.0, 3.4, 0, 1.6, 0, '#1f2328');
     FURN.clothingRack(root, 14.6, 3.4, 0, 1.6, 4, '#1f2328');
     FURN.clothingRack(root, 12.2, 5.9, 0, 1.6, 7, '#1f2328');
     FURN.clothingRack(root, 14.8, 5.9, 0, 1.6, 2, '#1f2328');
-    FURN.glassCabinet(root, 10.2, 1.0, 0, 4);
+    FURN.glassCabinet(root, 10.5, 6.7, 0.8, 4);
     FURN.displayTable(root, 13.3, 8.1, 0, '#f6f6f3', '#2a2d33');
     FURN.displayTable(root, 16.1, 8.1, 0, '#f6f6f3', '#2a2d33');
-    FURN.mannequin(root, 11.4, 1.3, 0.3, '#e07a5f');
+    FURN.mannequin(root, 13.2, 1.4, 0.3, '#e07a5f');
     FURN.mannequin(root, 9.9, 5.6, 0.8, '#3d405b', '#6b4f3a');
     FURN.plant(root, W - 0.6, 0.8, 0.9);
 
     // ---------- Disk (mellan profilrummet och kontoret) ----------
-    FURN.serviceCounter(root, 15.5, OZ, 3.6, 0, 'tisdag');
+    FURN.serviceCounter(root, 15.3, OZ, 3.2, 0, 'tisdag');
     label('Disk', 15.5, 1.9, OZ);
 
     // ---------- Kontor: 2 rader om 4 längs med rummet, en i mitten och en mot högra väggen ----------
     label('Kontor', 15.7, 2.4, OZ + 1.6);
-    const deskZ = [OZ + 1.9, OZ + 3.4, OZ + 4.9, OZ + 6.4];
-    [15.9, W - 0.46].forEach((x, r) => deskZ.forEach((z, i) => FURN.desk(root, x, z, -Math.PI / 2, ['#e07a5f', '#81b29a', '#6d9dc5', '#f2cc8f'][(i + r) % 4])));
+    const deskZ = [OZ + 2.4, OZ + 3.9, OZ + 5.4, OZ + 6.9];
+    [15.6, W - 0.46].forEach((x, r) => deskZ.forEach((z, i) => FURN.desk(root, x, z, -Math.PI / 2, ['#e07a5f', '#81b29a', '#6d9dc5', '#f2cc8f'][(i + r) % 4])));
     // soffhörna längst ned
     const LX = (OX + W) / 2;
     FURN.rug(root, LX, D - 1.6, 4.2, 2.9);
@@ -233,7 +232,7 @@
       dims: { W, D, TOP, PX, DIAG_Z, OX, OZ },
       // spelpunkter
       entrance: { outside: new THREE.Vector3(W + 3.2, 0, 2.5), aisleX: W - 1.0 },
-      slots: [14.3, 16.7, 15.5],   // kassaplatser längs disken (x)
+      slots: [14.2, 16.4, 15.3],   // kassaplatser längs disken (x)
       counterZ: OZ,
       playerStart: new THREE.Vector3(15.5, 0, OZ + 1.1),
       dropTable: { x: 11.4, z: OZ + 5.2, rot: Math.PI / 2 },
